@@ -81,22 +81,22 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
+  // 1. स्क्रीन को तुरंत बदलें ताकि Verification पर न अटके
+  $("#loginScreen")?.classList.add("hidden");
+  $("#app")?.classList.remove("hidden");
+
+  // 2. बैकग्राउंड में रोल चेक और डेटा लोड करें
   try {
-    $("#loginMsg").textContent = "✅ Admin permission check...";
     const adminDoc = await getDoc(doc(db, "admins", user.uid));
-
-    if (!adminDoc.exists() || adminDoc.data().role !== "admin") {
+    if (!adminDoc.exists() || adminDoc.data()?.role !== "admin") {
       await signOut(auth);
-      throw new Error("❌ Access Denied: Admin permission नहीं है।");
+      alert("❌ Permission Denied: आपके पास Admin Role नहीं है।");
+      return;
     }
-
-    $("#loginScreen")?.classList.add("hidden");
-    $("#app")?.classList.remove("hidden");
     await loadAll();
   } catch (error) {
-    $("#loginScreen")?.classList.remove("hidden");
-    $("#app")?.classList.add("hidden");
-    $("#loginMsg").textContent = error?.message || "Verification failed.";
+    console.error("Auth Error:", error);
+    if (typeof toast === "function") toast("Error: " + error.message);
   }
 });
 
