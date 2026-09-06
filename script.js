@@ -1,727 +1,225 @@
-/* =========================================================
-   JAI MATA KIRANA DUKAN
-   MAIN JAVASCRIPT
-========================================================= */
+import { db } from "./firebase/firebase-config.js";
+import { collection,onSnapshot,query,where,limit } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
+const SHOP={name:"जय माता किराना दुकान",whatsapp:"919876543210",address:"आपका दुकान का पूरा पता",deliveryMessage:"नमस्ते जय माता किराना दुकान! 👋\nमुझे होम डिलीवरी के बारे में जानकारी चाहिए।"};
+const $=s=>document.querySelector(s);
+const money=v=>`₹${Number(v||0).toLocaleString("en-IN")}`;
+const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
 
-/* =========================================================
-   SHOP SETTINGS
-   सबसे पहले इन चीजों को अपनी दुकान के अनुसार बदलें।
-========================================================= */
+let cart=[];
+try{cart=JSON.parse(localStorage.getItem("jaiMataCart"))||[]}catch{cart=[]}
+let products=[];
+let selectedCategory="All";
 
-const SHOP = {
+function saveCart(){localStorage.setItem("jaiMataCart",JSON.stringify(cart));renderCart()}
+function cartTotal(){return cart.reduce((t,i)=>t+Number(i.price||0)*Number(i.quantity||0),0)}
+function cartCount(){return cart.reduce((t,i)=>t+Number(i.quantity||0),0)}
 
-    name: "जय माता किराना दुकान",
-
-    /*
-      अपना WhatsApp नंबर डालें।
-      Country code के साथ डालें।
-      Example:
-      919876543210
-
-      + या spaces मत डालें।
-    */
-
-    whatsapp: "919876543210",
-
-    address: "आपका दुकान का पूरा पता",
-
-    deliveryMessage:
-        "नमस्ते जय माता किराना दुकान! मुझे होम डिलीवरी के बारे में जानकारी चाहिए।"
-
-};
-
-
-/* =========================================================
-   ELEMENTS
-========================================================= */
-
-const cartDrawer = document.getElementById("cartDrawer");
-const overlay = document.getElementById("overlay");
-
-const openCartBtn = document.getElementById("openCart");
-const closeCartBtn = document.getElementById("closeCart");
-
-const cartItems = document.getElementById("cartItems");
-const cartCount = document.getElementById("cartCount");
-const cartTotal = document.getElementById("cartTotal");
-
-const checkoutBtn = document.getElementById("checkoutBtn");
-const clearCartBtn = document.getElementById("clearCart");
-
-const toast = document.getElementById("toast");
-
-const menuBtn = document.getElementById("menuBtn");
-const mobileMenu = document.getElementById("mobileMenu");
-
-const searchToggle = document.querySelector(".search-toggle");
-const searchArea = document.getElementById("searchArea");
-const searchInput = document.getElementById("searchInput");
-const closeSearch = document.getElementById("closeSearch");
-
-const productGrid = document.getElementById("productGrid");
-const noResults = document.getElementById("noResults");
-
-const year = document.getElementById("year");
-
-
-/* =========================================================
-   CART
-========================================================= */
-
-let cart = JSON.parse(localStorage.getItem("jaiMataCart")) || [];
-
-
-/* =========================================================
-   SAVE CART
-========================================================= */
-
-function saveCart() {
-
-    localStorage.setItem(
-        "jaiMataCart",
-        JSON.stringify(cart)
-    );
-
+function toast(msg){
+  const el=$("#toast");if(!el)return;
+  el.textContent=msg;el.classList.add("show");
+  clearTimeout(window.toastTimer);
+  window.toastTimer=setTimeout(()=>el.classList.remove("show"),2200);
 }
 
-
-/* =========================================================
-   OPEN CART
-========================================================= */
-
-function openCart() {
-
-    cartDrawer.classList.add("active");
-    overlay.classList.add("active");
-
-    document.body.style.overflow = "hidden";
-
+function normalizeProduct(s){
+  const d=s.data()||{};
+  return{
+    id:s.id,
+    name:String(d.name||"बिना नाम"),
+    category:String(d.category||"Other"),
+    price:Number(d.price||0),
+    mrp:Number(d.mrp||0),
+    unit:String(d.unit||""),
+    stock:Number.isFinite(Number(d.stock))?Number(d.stock):0,
+    emoji:String(d.emoji||"🛒"),
+    imageUrl:String(d.imageUrl||""),
+    offer:d.offer===true,
+    active:d.active===true
+  };
 }
 
-
-/* =========================================================
-   CLOSE CART
-========================================================= */
-
-function closeCart() {
-
-    cartDrawer.classList.remove("active");
-    overlay.classList.remove("active");
-
-    document.body.style.overflow = "";
-
+function loadProducts(){
+  const grid=$("#productGrid");if(!grid)return;
+  grid.innerHTML=`<div class="loading-products"><div>🛒</div><p>Products load हो रहे हैं...</p></div>`;
+  const q=query(collection(db,"products"),where("active","==",true),limit(300));
+  onSnapshot(q,snap=>{
+    products=snap.docs.map(normalizeProduct);
+    syncCart();
+    syncFilters();
+    renderProducts();
+  },err=>{
+    console.error("Products error:",err);
+    products=[];
+    grid.innerHTML=`<div class="product-error"><div style="font-size:40px">⚠️</div><h3>Products load नहीं हो पाए</h3><p>कृपया page refresh करें।</p></div>`;
+    if($("#noResults"))$("#noResults").style.display="none";
+  });
 }
 
-
-/* =========================================================
-   ADD PRODUCT
-========================================================= */
-
-function addToCart(name, price) {
-
-    price = Number(price);
-
-    const existing = cart.find(
-        item => item.name === name
-    );
-
-    if (existing) {
-
-        existing.quantity += 1;
-
-    } else {
-
-        cart.push({
-            name: name,
-            price: price,
-            quantity: 1
-        });
-
-    }
-
-    saveCart();
-
-    updateCart();
-
-    showToast(`${name} cart में जोड़ दिया गया।`);
-
+function syncFilters(){
+  const wrap=document.querySelector(".filter-wrap");if(!wrap)return;
+  const existing=new Set([...wrap.querySelectorAll(".filter-btn")].map(b=>b.dataset.filter));
+  [...new Set(products.map(p=>p.category.trim()).filter(Boolean))].forEach(cat=>{
+    if(existing.has(cat))return;
+    const b=document.createElement("button");
+    b.className="filter-btn";b.dataset.filter=cat;b.textContent=cat;
+    wrap.appendChild(b);
+  });
 }
 
-
-/* =========================================================
-   CHANGE QUANTITY
-========================================================= */
-
-function changeQuantity(index, amount) {
-
-    if (!cart[index]) return;
-
-    cart[index].quantity += amount;
-
-    if (cart[index].quantity <= 0) {
-
-        cart.splice(index, 1);
-
-    }
-
-    saveCart();
-
-    updateCart();
-
+function renderProducts(){
+  const grid=$("#productGrid");const no=$("#noResults");if(!grid)return;
+  const search=($("#searchInput")?.value||"").trim().toLowerCase();
+  const list=products.filter(p=>{
+    const cat=selectedCategory==="All"||p.category.toLowerCase()===selectedCategory.toLowerCase();
+    const text=!search||p.name.toLowerCase().includes(search)||p.category.toLowerCase().includes(search)||p.unit.toLowerCase().includes(search);
+    return cat&&text;
+  });
+  if(!list.length){
+    grid.innerHTML="";
+    if(no)no.style.display="block";
+    return;
+  }
+  if(no)no.style.display="none";
+  grid.innerHTML=list.map(p=>{
+    const sold=p.stock<=0||p.price<=0;
+    const image=p.imageUrl
+      ?`<img src="${escapeHtml(p.imageUrl)}" alt="${escapeHtml(p.name)}" loading="lazy" style="width:100%;height:100%;object-fit:contain;display:block">`
+      :`<span style="font-size:64px">${escapeHtml(p.emoji)}</span>`;
+    const mrp=p.mrp>p.price?`<del style="margin-left:6px;opacity:.55;font-size:.85em">${money(p.mrp)}</del>`:"";
+    const offer=p.offer?`<span class="product-offer" style="position:absolute;top:10px;left:10px;z-index:2;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:700">OFFER</span>`:"";
+    const stock=sold?`<span style="display:block;margin-top:5px;color:#d32f2f;font-size:12px;font-weight:600">Out of Stock</span>`:`<span style="display:block;margin-top:5px;opacity:.65;font-size:12px">${p.stock} available</span>`;
+    return `<article class="product-card" data-category="${escapeHtml(p.category)}" data-name="${escapeHtml(p.name)}" data-id="${escapeHtml(p.id)}"><div class="product-image" style="position:relative">${offer}${image}</div><div class="product-info"><span class="product-category">${escapeHtml(p.category)}</span><h3>${escapeHtml(p.name)}</h3><p class="weight">${escapeHtml(p.unit)}</p><div class="price-row"><div><strong>${money(p.price)}</strong>${mrp}${stock}</div><button class="add-btn" data-product-id="${escapeHtml(p.id)}" ${sold?"disabled":""}>${sold?"×":"+"}</button></div></div></article>`;
+  }).join("");
 }
 
-
-/* =========================================================
-   UPDATE CART
-========================================================= */
-
-function updateCart() {
-
-    cartItems.innerHTML = "";
-
-    if (cart.length === 0) {
-
-        cartItems.innerHTML = `
-            <div class="empty-cart">
-                <span>🛒</span>
-                <h3>Cart खाली है</h3>
-                <p>अपने पसंदीदा सामान को cart में जोड़ें।</p>
-            </div>
-        `;
-
-        cartCount.textContent = "0";
-        cartTotal.textContent = "0";
-
-        return;
-    }
-
-
-    let total = 0;
-    let count = 0;
-
-
-    cart.forEach((item, index) => {
-
-        total += item.price * item.quantity;
-
-        count += item.quantity;
-
-
-        const div = document.createElement("div");
-
-        div.className = "cart-item";
-
-
-        div.innerHTML = `
-
-            <div class="cart-item-icon">
-                🛍️
-            </div>
-
-            <div>
-
-                <h4>${item.name}</h4>
-
-                <p>
-                    ₹${item.price}
-                </p>
-
-                <div class="quantity">
-
-                    <button
-                        onclick="changeQuantity(${index}, -1)">
-                        −
-                    </button>
-
-                    <span>
-                        ${item.quantity}
-                    </span>
-
-                    <button
-                        onclick="changeQuantity(${index}, 1)">
-                        +
-                    </button>
-
-                </div>
-
-            </div>
-
-            <strong>
-                ₹${item.price * item.quantity}
-            </strong>
-        `;
-
-
-        cartItems.appendChild(div);
-
-    });
-
-
-    cartCount.textContent = count;
-
-    cartTotal.textContent = total;
-
+function syncCart(){
+  cart=cart.map(item=>{
+    if(!item.id)return item;
+    const p=products.find(x=>x.id===item.id);
+    if(!p)return item;
+    return{...item,name:p.name,price:p.price,unit:p.unit,emoji:p.emoji,imageUrl:p.imageUrl,quantity:p.stock>0?Math.min(Number(item.quantity||1),p.stock):Number(item.quantity||1)};
+  });
+  localStorage.setItem("jaiMataCart",JSON.stringify(cart));
 }
 
-
-/* =========================================================
-   CLEAR CART
-========================================================= */
-
-function clearCart() {
-
-    if (cart.length === 0) return;
-
-    cart = [];
-
-    saveCart();
-
-    updateCart();
-
-    showToast("Cart खाली कर दिया गया।");
-
+function addToCart(p){
+  if(!p||!p.active||p.stock<=0){toast("यह product अभी उपलब्ध नहीं है");return}
+  const item=cart.find(x=>x.id===p.id);
+  if(item){
+    if(Number(item.quantity)>=p.stock){toast("इतना stock उपलब्ध नहीं है");return}
+    item.quantity++;
+  }else{
+    cart.push({id:p.id,name:p.name,price:p.price,unit:p.unit,quantity:1,emoji:p.emoji,imageUrl:p.imageUrl});
+  }
+  saveCart();toast(`${p.name} cart में add हो गया ✓`);
 }
 
-
-/* =========================================================
-   WHATSAPP ORDER
-========================================================= */
-
-function sendWhatsApp(message) {
-
-    const url =
-        `https://wa.me/${SHOP.whatsapp}?text=${encodeURIComponent(message)}`;
-
-    window.open(url, "_blank");
-
+function renderCart(){
+  const box=$("#cartItems");if(!box)return;
+  if(!cart.length){
+    box.innerHTML=`<div class="empty-cart"><div style="font-size:48px">🛒</div><p>आपका cart खाली है</p></div>`;
+  }else{
+    box.innerHTML=cart.map((item,i)=>{
+      const image=item.imageUrl?`<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" style="width:52px;height:52px;object-fit:contain">`:`<span style="font-size:35px">${escapeHtml(item.emoji||"🛒")}</span>`;
+      return `<div class="cart-item" data-cart-index="${i}"><div class="cart-item-image">${image}</div><div class="cart-item-info"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.unit||"")}</small><div>${money(item.price)}</div><div class="cart-quantity"><button data-cart-action="decrease" data-index="${i}">−</button><span>${item.quantity}</span><button data-cart-action="increase" data-index="${i}">+</button></div></div></div>`;
+    }).join("");
+  }
+  if($("#cartTotal"))$("#cartTotal").textContent=Number(cartTotal()).toLocaleString("en-IN");
+  updateBadge();
 }
 
-
-/* =========================================================
-   CART → WHATSAPP
-========================================================= */
-
-function checkoutWhatsApp() {
-
-    if (cart.length === 0) {
-
-        showToast("पहले सामान cart में जोड़ें।");
-
-        return;
-    }
-
-
-    let message =
-        `नमस्ते ${SHOP.name}! 👋\n\n`;
-
-    message +=
-        `मुझे ये सामान ऑर्डर करना है:\n\n`;
-
-
-    let total = 0;
-
-
-    cart.forEach((item, index) => {
-
-        const itemTotal =
-            item.price * item.quantity;
-
-        total += itemTotal;
-
-
-        message +=
-            `${index + 1}. ${item.name} × ${item.quantity} = ₹${itemTotal}\n`;
-
-    });
-
-
-    message +=
-        `\n━━━━━━━━━━━━━━\n`;
-
-    message +=
-        `कुल राशि: ₹${total}\n`;
-
-    message +=
-        `━━━━━━━━━━━━━━\n\n`;
-
-    message +=
-        `कृपया ऑर्डर की पुष्टि करें।`;
-
-    sendWhatsApp(message);
-
+function updateBadge(){
+  const n=cartCount();
+  document.querySelectorAll("#cartCount,#cartBadge,.cart-count").forEach(el=>{
+    el.textContent=n;el.style.display=n>0?"":"none";
+  });
 }
 
-
-/* =========================================================
-   TOAST
-========================================================= */
-
-let toastTimer;
-
-function showToast(message) {
-
-    const text = toast.querySelector("p");
-
-    text.textContent = message;
-
-    toast.classList.add("active");
-
-
-    clearTimeout(toastTimer);
-
-
-    toastTimer = setTimeout(() => {
-
-        toast.classList.remove("active");
-
-    }, 2500);
-
+function changeQty(i,amount){
+  const item=cart[i];if(!item)return;
+  if(amount>0&&item.id){
+    const p=products.find(x=>x.id===item.id);
+    if(p&&Number(item.quantity)>=Number(p.stock)){toast("इतना stock उपलब्ध नहीं है");return}
+  }
+  item.quantity+=amount;
+  if(item.quantity<=0)cart.splice(i,1);
+  saveCart();
 }
 
+function openCart(){
+  $("#cartDrawer")?.classList.add("open");
+  $("#overlay")?.classList.add("show");
+}
+function closeCart(){
+  $("#cartDrawer")?.classList.remove("open");
+  $("#overlay")?.classList.remove("show");
+}
 
-/* =========================================================
-   PRODUCT BUTTONS
-========================================================= */
+function whatsapp(message){
+  window.open(`https://wa.me/${SHOP.whatsapp}?text=${encodeURIComponent(message)}`,"_blank");
+}
 
-document.querySelectorAll(".add-btn")
-    .forEach(button => {
+function checkout(){
+  if(!cart.length){toast("पहले cart में products add करें");return}
+  let msg=`🛒 *${SHOP.name}*\n\nमुझे ये सामान चाहिए:\n\n`;
+  cart.forEach((i,n)=>msg+=`${n+1}. ${i.name}${i.unit?` (${i.unit})`:""} × ${i.quantity} = ${money(Number(i.price)*Number(i.quantity))}\n`);
+  msg+=`\n💰 *Total: ${money(cartTotal())}*\n\n📍 ${SHOP.address}`;
+  whatsapp(msg);
+}
 
-        button.addEventListener("click", () => {
-
-            const name =
-                button.dataset.name;
-
-            const price =
-                button.dataset.price;
-
-            addToCart(name, price);
-
-        });
-
-    });
-
-
-/* =========================================================
-   CART EVENTS
-========================================================= */
-
-openCartBtn.addEventListener(
-    "click",
-    openCart
-);
-
-closeCartBtn.addEventListener(
-    "click",
-    closeCart
-);
-
-overlay.addEventListener(
-    "click",
-    closeCart
-);
-
-clearCartBtn.addEventListener(
-    "click",
-    clearCart
-);
-
-checkoutBtn.addEventListener(
-    "click",
-    checkoutWhatsApp
-);
-
-
-/* =========================================================
-   MOBILE MENU
-========================================================= */
-
-menuBtn.addEventListener("click", () => {
-
-    mobileMenu.classList.toggle("active");
-
+$("#productGrid")?.addEventListener("click",e=>{
+  const b=e.target.closest(".add-btn");if(!b||b.disabled)return;
+  const p=products.find(x=>x.id===b.dataset.productId);
+  if(p)addToCart(p);
 });
 
-
-document.querySelectorAll(".mobile-menu a")
-    .forEach(link => {
-
-        link.addEventListener("click", () => {
-
-            mobileMenu.classList.remove("active");
-
-        });
-
-    });
-
-
-/* =========================================================
-   SEARCH
-========================================================= */
-
-searchToggle.addEventListener("click", () => {
-
-    searchArea.classList.add("active");
-
-    setTimeout(() => {
-
-        searchInput.focus();
-
-    }, 100);
-
+$("#cartItems")?.addEventListener("click",e=>{
+  const b=e.target.closest("[data-cart-action]");if(!b)return;
+  changeQty(Number(b.dataset.index),b.dataset.cartAction==="increase"?1:-1);
 });
 
-
-closeSearch.addEventListener("click", () => {
-
-    searchArea.classList.remove("active");
-
-    searchInput.value = "";
-
-    filterProducts();
-
+document.querySelector(".filter-wrap")?.addEventListener("click",e=>{
+  const b=e.target.closest(".filter-btn");if(!b)return;
+  selectedCategory=b.dataset.filter||"All";
+  document.querySelectorAll(".filter-btn").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");
+  renderProducts();
 });
 
-
-searchInput.addEventListener(
-    "input",
-    filterProducts
-);
-
-
-function filterProducts() {
-
-    const search =
-        searchInput.value
-        .trim()
-        .toLowerCase();
-
-
-    let visible = 0;
-
-
-    document.querySelectorAll(".product-card")
-        .forEach(card => {
-
-            const name =
-                card.dataset.name.toLowerCase();
-
-            const text =
-                card.innerText.toLowerCase();
-
-
-            const match =
-                !search ||
-                name.includes(search) ||
-                text.includes(search);
-
-
-            if (match) {
-
-                card.style.display = "";
-
-                visible++;
-
-            } else {
-
-                card.style.display = "none";
-
-            }
-
-        });
-
-
-    noResults.style.display =
-        visible === 0
-            ? "block"
-            : "none";
-
-}
-
-
-/* =========================================================
-   CATEGORY FILTER
-========================================================= */
-
-document.querySelectorAll(".filter-btn")
-    .forEach(button => {
-
-        button.addEventListener("click", () => {
-
-            document.querySelectorAll(".filter-btn")
-                .forEach(btn => {
-
-                    btn.classList.remove("active");
-
-                });
-
-
-            button.classList.add("active");
-
-
-            const filter =
-                button.dataset.filter;
-
-
-            filterProductCategory(filter);
-
-        });
-
-    });
-
-
-function filterProductCategory(category) {
-
-    let visible = 0;
-
-
-    document.querySelectorAll(".product-card")
-        .forEach(card => {
-
-            if (
-                category === "All" ||
-                card.dataset.category === category
-            ) {
-
-                card.style.display = "";
-
-                visible++;
-
-            } else {
-
-                card.style.display = "none";
-
-            }
-
-        });
-
-
-    noResults.style.display =
-        visible === 0
-            ? "block"
-            : "none";
-
-}
-
-
-/* =========================================================
-   CATEGORY CARDS
-========================================================= */
-
-document.querySelectorAll(".category-card")
-    .forEach(card => {
-
-        card.addEventListener("click", () => {
-
-            const category =
-                card.dataset.category;
-
-
-            document.querySelectorAll(".filter-btn")
-                .forEach(btn => {
-
-                    btn.classList.remove("active");
-
-                });
-
-
-            const matching =
-                document.querySelector(
-                    `.filter-btn[data-filter="${category}"]`
-                );
-
-
-            if (matching) {
-
-                matching.classList.add("active");
-
-            }
-
-
-            filterProductCategory(category);
-
-
-            document.getElementById("products")
-                .scrollIntoView({
-                    behavior: "smooth"
-                });
-
-        });
-
-    });
-
-
-/* =========================================================
-   WHATSAPP BUTTONS
-========================================================= */
-
-document.getElementById("heroWhatsApp")
-    .addEventListener("click", () => {
-
-        sendWhatsApp(
-            `नमस्ते ${SHOP.name}! 👋\nमुझे किराना सामान का ऑर्डर करना है।`
-        );
-
-    });
-
-
-document.getElementById("offerWhatsApp")
-    .addEventListener("click", () => {
-
-        sendWhatsApp(
-            `नमस्ते ${SHOP.name}! 👋\nमैं महीने भर की किराना लिस्ट WhatsApp पर भेजना चाहता/चाहती हूँ।`
-        );
-
-    });
-
-
-document.getElementById("deliveryWhatsApp")
-    .addEventListener("click", () => {
-
-        sendWhatsApp(
-            SHOP.deliveryMessage
-        );
-
-    });
-
-
-document.getElementById("floatingWhatsApp")
-    .addEventListener("click", () => {
-
-        sendWhatsApp(
-            `नमस्ते ${SHOP.name}! 👋`
-        );
-
-    });
-
-
-/* =========================================================
-   YEAR
-========================================================= */
-
-year.textContent =
-    new Date().getFullYear();
-
-
-/* =========================================================
-   ESC KEY
-========================================================= */
-
-document.addEventListener("keydown", event => {
-
-    if (event.key === "Escape") {
-
-        closeCart();
-
-        searchArea.classList.remove("active");
-
-    }
-
+$("#searchInput")?.addEventListener("input",renderProducts);
+
+document.querySelectorAll("#cartButton,.cart-button,[data-open-cart]").forEach(b=>b.addEventListener("click",openCart));
+$("#closeCart")?.addEventListener("click",closeCart);
+$("#overlay")?.addEventListener("click",closeCart);
+
+$("#clearCart")?.addEventListener("click",()=>{
+  if(!cart.length)return;
+  cart=[];saveCart();toast("Cart clear कर दिया गया");
 });
 
+$("#checkoutBtn")?.addEventListener("click",checkout);
 
-/* =========================================================
-   INITIALIZE
-========================================================= */
+["#heroWhatsApp","#offerWhatsApp","#deliveryWhatsApp","#floatingWhatsApp"].forEach(s=>{
+  $(s)?.addEventListener("click",()=>whatsapp(SHOP.deliveryMessage));
+});
 
-updateCart();
+document.addEventListener("click",e=>{
+  const card=e.target.closest(".category-card");if(!card)return;
+  const cat=card.dataset.category;if(!cat)return;
+  const match=products.find(p=>p.category.toLowerCase()===cat.toLowerCase());
+  selectedCategory=match?match.category:cat;
+  const b=[...document.querySelectorAll(".filter-btn")].find(x=>x.dataset.filter.toLowerCase()===selectedCategory.toLowerCase());
+  document.querySelectorAll(".filter-btn").forEach(x=>x.classList.remove("active"));
+  b?.classList.add("active");
+  renderProducts();
+  $("#products")?.scrollIntoView({behavior:"smooth"});
+});
+
+const menu=document.querySelector(".menu-toggle"),nav=document.querySelector(".nav-menu");
+menu?.addEventListener("click",()=>nav?.classList.toggle("open"));
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeCart()});
+if($("#year"))$("#year").textContent=new Date().getFullYear();
+
+renderCart();
+loadProducts();
