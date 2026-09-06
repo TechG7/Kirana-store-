@@ -85,3 +85,4 @@ $("#saveSettings").onclick=async()=>{
  await setDoc(doc(db,"settings","shop"),settings,{merge:true});toast("Settings saved");
 }
 $("#refreshOrders").onclick=async()=>{await loadOrders();renderOrders();renderDashboard();toast("Orders refreshed")};
+Gautam 
