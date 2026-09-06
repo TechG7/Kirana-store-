@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin • जय माता किराना दुकान</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div id="loginScreen" class="login-screen">
+  <div class="login-card"><div class="admin-logo">🛒</div><span class="eyebrow">JAI MATA KIRANA</span><h1>Admin Login</h1><p>Store manage करने के लिए sign in करें।</p>
+    <form id="loginForm"><input id="email" type="email" placeholder="Admin email" required><input id="password" type="password" placeholder="Password" required><button class="btn primary full">Login →</button></form>
+    <small id="loginMsg"></small>
+  </div>
+</div>
+<div id="app" class="app hidden">
+  <aside class="sidebar"><div class="side-brand">🛒 <b>Jai Mata</b><small>Admin Panel</small></div>
+    <button class="side-link active" data-view="dashboard">📊 Dashboard</button>
+    <button class="side-link" data-view="products">📦 Products</button>
+    <button class="side-link" data-view="orders">🧾 Orders</button>
+    <button class="side-link" data-view="settings">⚙️ Settings</button>
+    <a class="side-link" href="../">🌐 Website</a>
+    <button id="logoutBtn" class="side-link logout">↪ Logout</button>
+  </aside>
+  <main class="main"><header class="mobile-head"><b>जय माता किराना</b><button id="mobileLogout">↪</button></header>
+    <section id="view-dashboard" class="view"><div class="page-head"><div><span class="eyebrow">OVERVIEW</span><h1>Dashboard</h1></div></div>
+      <div class="stats"><div class="stat"><span>Products</span><b id="statProducts">0</b></div><div class="stat"><span>Pending Orders</span><b id="statPending">0</b></div><div class="stat"><span>Total Orders</span><b id="statOrders">0</b></div><div class="stat"><span>Sales</span><b id="statSales">₹0</b></div></div>
+      <div class="panel"><div class="panel-head"><h2>Recent Orders</h2><button class="btn ghost" data-go="orders">View all</button></div><div id="recentOrders" class="table-wrap"></div></div>
+    </section>
+    <section id="view-products" class="view hidden"><div class="page-head"><div><span class="eyebrow">CATALOGUE</span><h1>Products</h1></div><button id="addProductBtn" class="btn primary">+ Add Product</button></div><div class="panel"><div id="productTable" class="table-wrap"></div></div></section>
+    <section id="view-orders" class="view hidden"><div class="page-head"><div><span class="eyebrow">CUSTOMER ORDERS</span><h1>Orders</h1></div><button id="refreshOrders" class="btn ghost">↻ Refresh</button></div><div class="panel"><div id="orderTable" class="table-wrap"></div></div></section>
+    <section id="view-settings" class="view hidden"><div class="page-head"><div><span class="eyebrow">STORE PROFILE</span><h1>Settings</h1></div><button id="saveSettings" class="btn primary">Save Settings</button></div>
+      <div class="panel form-grid">
+        <label>Shop name<input id="sName"></label><label>WhatsApp number<input id="sWhatsapp" placeholder="91XXXXXXXXXX"></label>
+        <label>UPI ID<input id="sUpi" placeholder="yourname@upi"></label><label>Google Maps link<input id="sMap"></label>
+        <label class="wide">Address<textarea id="sAddress"></textarea></label>
+        <label>Opening time<input id="sOpen" placeholder="सुबह 8:00"></label><label>Closing time<input id="sClose" placeholder="रात 9:00"></label>
+        <label>Delivery fee<input id="sDelivery" type="number" min="0"></label><label>Free delivery above<input id="sFree" type="number" min="0"></label>
+        <label>Minimum order<input id="sMin" type="number" min="0"></label>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="productModal" class="modal-backdrop hidden"><div class="modal"><button class="close" id="closeProduct">×</button><span class="eyebrow">PRODUCT</span><h2 id="productModalTitle">Add Product</h2>
+<form id="productForm"><input type="hidden" id="pId"><label>Name<input id="pName" required></label><label>Category<input id="pCategory" placeholder="जैसे आटा • चावल • दाल" required></label>
+<div class="two"><label>Price<input id="pPrice" type="number" min="0" required></label><label>MRP<input id="pMrp" type="number" min="0"></label></div>
+<div class="two"><label>Unit<input id="pUnit" placeholder="1 kg"></label><label>Stock<input id="pStock" type="number" min="0" required></label></div>
+<label>Emoji<input id="pEmoji" placeholder="🛍️"></label><label>Image<input id="pImage" type="file" accept="image/*"></label>
+<label class="check"><input id="pOffer" type="checkbox"> Offer product</label><label class="check"><input id="pActive" type="checkbox" checked> Active / visible</label>
+<button class="btn primary full" id="saveProduct">Save Product</button></form></div></div>
+<div id="toast" class="toast"></div>
+<script type="module" src="admin.js"></script>
+</body></html>
