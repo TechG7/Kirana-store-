@@ -1,6 +1,7 @@
 import{db}from"./firebase/firebase-config.js";
-import{collection,getDocs,query,where,limit,doc,getDoc,addDoc,serverTimestamp}from"https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-const $=s=>document.querySelector(s),money=n=>`₹${Number(n||0).toLocaleString("en-IN")}`;
+import{collection,getDocs,query,where,orderBy,limit,doc,getDoc,addDoc,serverTimestamp}from"https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+const $=s=>document.querySelector(s);
+const money=n=>`₹${Number(n||0).toLocaleString("en-IN")}`;
 const fallbackProducts=[
 {id:"demo1",name:"आटा",category:"आटा • चावल • दाल",price:55,mrp:65,unit:"1 kg",emoji:"🌾",stock:50,active:true,offer:true},
 {id:"demo2",name:"बासमती चावल",category:"आटा • चावल • दाल",price:95,mrp:110,unit:"1 kg",emoji:"🍚",stock:50,active:true,offer:true},
@@ -11,8 +12,10 @@ const fallbackProducts=[
 {id:"demo7",name:"नमकीन",category:"स्नैक्स",price:45,mrp:50,unit:"200 g",emoji:"🥨",stock:25,active:true},
 {id:"demo8",name:"हल्दी पाउडर",category:"तेल • मसाले",price:42,mrp:50,unit:"100 g",emoji:"🟡",stock:25,active:true}
 ];
-let products=[],settings={name:"जय माता किराना दुकान",whatsapp:"",upiId:"",address:"पता जल्द अपडेट होगा।",mapUrl:"",openingTime:"सुबह 8:00",closingTime:"रात 9:00",deliveryFee:0,freeDeliveryAbove:500,minOrder:0};
-let cart=JSON.parse(localStorage.getItem("jaiMataCart")||"{}"),activeCategory="सभी",searchTerm="";
+let products=[];
+let settings={name:"जय माता किराना दुकान",whatsapp:"",upiId:"",address:"पता जल्द अपडेट होगा।",mapUrl:"",openingTime:"सुबह 8:00",closingTime:"रात 9:00",deliveryFee:0,freeDeliveryAbove:500,minOrder:0};
+let cart=JSON.parse(localStorage.getItem("jaiMataCart")||"{}");
+let activeCategory="सभी",searchTerm="";
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
 function saveCart(){localStorage.setItem("jaiMataCart",JSON.stringify(cart))}
 function cartItems(){return Object.values(cart)}
@@ -20,8 +23,6 @@ function cartCount(){return cartItems().reduce((a,i)=>a+i.qty,0)}
 function cartSubtotal(){return cartItems().reduce((a,i)=>a+i.price*i.qty,0)}
 function deliveryFee(){const sub=cartSubtotal();if(!sub)return 0;if(settings.freeDeliveryAbove&&sub>=Number(settings.freeDeliveryAbove))return 0;return Number(settings.deliveryFee||0)}
 function whatsappUrl(text){return`https://wa.me/${String(settings.whatsapp||"").replace(/\D/g,"")}?text=${encodeURIComponent(text)}`}
-function escapeHtml(v=""){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-function escapeAttr(v=""){return escapeHtml(v)}
 async function loadData(){
 try{
 const[ps,ss]=await Promise.all([getDocs(query(collection(db,"products"),where("active","==",true),limit(200))),getDoc(doc(db,"settings","shop"))]);
@@ -48,14 +49,16 @@ $("#categoryList").innerHTML=cats.map(c=>`<button class="chip ${activeCategory==
 document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{activeCategory=b.dataset.cat;renderAll()})
 }
 function filtered(){
-return products.filter(p=>{const cat=activeCategory==="सभी"||p.category===activeCategory,q=!searchTerm||`${p.name} ${p.category} ${p.unit}`.toLowerCase().includes(searchTerm.toLowerCase());return cat&&q&&p.stock!==0})
-}
-function productImage(p){
-const src=p.imageData||p.imageUrl;
-return src?`<img src="${escapeAttr(src)}" alt="${escapeAttr(p.name)}" loading="lazy">`:`<span>${escapeHtml(p.emoji||"🛍️")}</span>`
+return products.filter(p=>{
+const cat=activeCategory==="सभी"||p.category===activeCategory;
+const q=!searchTerm||`${p.name} ${p.category} ${p.unit}`.toLowerCase().includes(searchTerm.toLowerCase());
+return cat&&q&&p.stock!==0
+})
 }
 function card(p){
-return`<article class="product">${p.offer?`<span class="badge">OFFER</span>`:""}<div class="product-img">${productImage(p)}</div><h3>${escapeHtml(p.name)}</h3><div class="unit">${escapeHtml(p.unit||"")}</div><div class="price-row"><div><span class="price">${money(p.price)}</span>${p.mrp?`<span class="mrp">${money(p.mrp)}</span>`:""}</div><button class="add" data-add="${p.id}" aria-label="Add">+</button></div></article>`
+const src=p.imageData||p.imageUrl;
+const img=src?`<img src="${escapeAttr(src)}" alt="${escapeAttr(p.name)}" loading="lazy">`:`<span>${p.emoji||"🛍️"}</span>`;
+return`<article class="product">${p.offer?`<span class="badge">OFFER</span>`:""}<div class="product-img">${img}</div><h3>${escapeHtml(p.name)}</h3><div class="unit">${escapeHtml(p.unit||"")}</div><div class="price-row"><div><span class="price">${money(p.price)}</span>${p.mrp?`<span class="mrp">${money(p.mrp)}</span>`:""}</div><button class="add" data-add="${p.id}" aria-label="Add">+</button></div></article>`
 }
 function renderAll(){
 renderCategories();
@@ -81,7 +84,7 @@ saveCart();renderCart()
 function renderCart(){
 $("#cartCount").textContent=cartCount();
 const items=cartItems();
-$("#cartItems").innerHTML=items.length?items.map(i=>`<div class="cart-line"><div class="cart-thumb">${i.imageData||i.imageUrl?`<img src="${escapeAttr(i.imageData||i.imageUrl)}" alt="">`:escapeHtml(i.emoji)}</div><div><h4>${escapeHtml(i.name)}</h4><small>${money(i.price)} • ${escapeHtml(i.unit)}</small><div class="qty"><button data-q="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button data-q="${i.id}" data-d="1">+</button></div></div><b>${money(i.price*i.qty)}</b></div>`).join(""):`<div class="empty">🛒<br>आपकी cart अभी खाली है।</div>`;
+$("#cartItems").innerHTML=items.length?items.map(i=>`<div class="cart-line"><div class="cart-thumb">${(i.imageData||i.imageUrl)?`<img src="${escapeAttr(i.imageData||i.imageUrl)}" alt="">`:i.emoji}</div><div><h4>${escapeHtml(i.name)}</h4><small>${money(i.price)} • ${escapeHtml(i.unit)}</small><div class="qty"><button data-q="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button data-q="${i.id}" data-d="1">+</button></div></div><b>${money(i.price*i.qty)}</b></div>`).join(""):`<div class="empty">🛒<br>आपकी cart अभी खाली है।</div>`;
 const sub=cartSubtotal(),fee=deliveryFee();
 $("#cartSubtotal").textContent=money(sub);
 $("#cartDelivery").textContent=fee?money(fee):"Free";
@@ -126,5 +129,7 @@ $("#upiCanvas").classList.remove("hidden")
 }
 }catch(err){console.error(err);toast("Order save नहीं हुआ। Firebase rules/settings check करें।")}
 };
+function escapeHtml(v=""){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function escapeAttr(v=""){return escapeHtml(v)}
 $("#year").textContent=new Date().getFullYear();
 loadData();
