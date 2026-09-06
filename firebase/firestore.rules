@@ -3,69 +3,60 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper functions
     function signedIn() {
       return request.auth != null;
     }
 
     function isAdmin() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == "admin";
+      return signedIn() && 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == "admin";
     }
 
+    // Admins Collection
     match /admins/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
     }
 
+    // Products Collection
     match /products/{productId} {
-      allow read: if resource.data.active == true || isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
+    // Categories Collection
     match /categories/{categoryId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
+    // Settings Collection
     match /settings/{docId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
+    // Orders Collection
     match /orders/{orderId} {
-      allow create: if
-        request.resource.data.keys().hasAll([
-          "customer", "items", "subtotal", "deliveryFee", "total",
-          "paymentMethod", "address", "status", "createdAt"
-        ])
-        && request.resource.data.customer.name is string
-        && request.resource.data.customer.phone is string
-        && request.resource.data.customer.phone.size() >= 10
-        && request.resource.data.address is string
-        && request.resource.data.address.size() >= 5
-        && request.resource.data.items is list
-        && request.resource.data.items.size() >= 1
-        && request.resource.data.status == "Pending"
-        && request.resource.data.total is number;
-
+      allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
+    // Reviews Collection
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if request.resource.data.name is string
-        && request.resource.data.rating is int
-        && request.resource.data.rating >= 1
-        && request.resource.data.rating <= 5
-        && request.resource.data.comment is string;
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 
+    // Customers Collection
     match /customers/{customerId} {
       allow read, write: if isAdmin();
     }
 
+    // Default Fallback Rule
     match /{document=**} {
       allow read, write: if false;
     }
