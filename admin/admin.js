@@ -122,37 +122,42 @@ $("#productForm").onsubmit=async e=>{
  if(!category)return toast("Category डालें");
  if(!Number.isFinite(price)||price<0)return toast("Valid price डालें");
  if(!Number.isFinite(stock)||stock<0)return toast("Valid stock डालें");
- if(mrp<0)return toast("Valid MRP डालें");
+ if(!Number.isFinite(mrp)||mrp<0)return toast("Valid MRP डालें");
  const file=$("#pImage").files?.[0];
- if(file){
-  if(!file.type.startsWith("image/"))return toast("सिर्फ image file upload करें");
-  if(file.size>5*1024*1024)return toast("Image 5 MB से छोटी होनी चाहिए");
- }
+ if(file&&!file.type.startsWith("image/"))return toast("सिर्फ image file upload करें");
+ if(file&&file.size>5*1024*1024)return toast("Image 5 MB से छोटी होनी चाहिए");
  const oldText=btn.textContent;
+ const wait=(p,ms=15000)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error("Firebase response नहीं आया। Internet/Firebase Rules check करें।")),ms))]);
  btn.disabled=true;btn.textContent="Saving...";
  try{
   const data={name,category,price,mrp,unit:$("#pUnit").value.trim(),stock,emoji:$("#pEmoji").value.trim()||"🛍️",offer:$("#pOffer").checked,active:$("#pActive").checked,updatedAt:serverTimestamp()};
-  if(file){
-   const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
-   const path=`products/${Date.now()}-${safeName}`;
-   const storageRef=ref(storage,path);
-   await uploadBytes(storageRef,file,{contentType:file.type});
-   data.imageUrl=await getDownloadURL(storageRef);
-  }else if(old?.imageUrl)data.imageUrl=old.imageUrl;
-  const productRef=id?doc(db,"products",id):doc(collection(db,"products"));
+  let productRef;
   if(id){
-   await updateDoc(productRef,data);
+   productRef=doc(db,"products",id);
+   await wait(updateDoc(productRef,data));
   }else{
-   await setDoc(productRef,{...data,createdAt:serverTimestamp()});
+   productRef=doc(collection(db,"products"));
+   await wait(setDoc(productRef,{...data,createdAt:serverTimestamp()}));
+  }
+  if(file){
+   btn.textContent="Uploading image...";
+   const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+   const storageRef=ref(storage,`products/${Date.now()}-${safe}`);
+   await wait(uploadBytes(storageRef,file,{contentType:file.type}));
+   const imageUrl=await wait(getDownloadURL(storageRef));
+   await wait(updateDoc(productRef,{imageUrl,updatedAt:serverTimestamp()}));
   }
   $("#productModal").classList.add("hidden");
-  await loadProducts();renderProducts();renderDashboard();
+  await loadProducts();
+  renderProducts();
+  renderDashboard();
   toast("✅ Product saved successfully");
  }catch(err){
   console.error("PRODUCT SAVE ERROR:",err);
-  toast("❌ Save failed: "+(err.message||"Unknown error"));
+  toast("❌ "+(err.message||"Product save failed"));
  }finally{
-  btn.disabled=false;btn.textContent=oldText;
+  btn.disabled=false;
+  btn.textContent=oldText;
  }
 };
 
