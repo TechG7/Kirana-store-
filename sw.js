@@ -1,4 +1,4 @@
-const CACHE_NAME="jai-mata-kirana-v1";
+const CACHE_NAME="jai-mata-kirana-v2";
 const FILES=[
 "./",
 "./index.html",
