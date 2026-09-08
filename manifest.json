@@ -1,7 +1,7 @@
 {
-  "name":"जय माता किराना दुकान",
-  "short_name":"जय माता किराना",
-  "description":"जय माता किराना दुकान - Online Grocery Store",
+  "name":"जय माता दी किराना दुकान",
+  "short_name":"जय माता दी किराना",
+  "description":"जय माता दी किराना दुकान - Online Grocery Store",
   "start_url":"./",
   "display":"standalone",
   "background_color":"#ffffff",
