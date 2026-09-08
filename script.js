@@ -1,7 +1,6 @@
 import{auth,db}from"./firebase/firebase-config.js";
 import{GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut}from"https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import{collection,getDocs,getDoc,doc,addDoc,serverTimestamp}from"https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-
+import{collection,getDocs,getDoc,doc,addDoc,serverTimestamp,query,where}from"https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 const $=s=>document.querySelector(s);
 const money=n=>`₹${Number(n||0).toLocaleString("en-IN")}`;
 
