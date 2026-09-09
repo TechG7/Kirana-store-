@@ -1,4 +1,4 @@
-# जय माता किराना दुकान — Firebase Edition
+# जय माता किराना दी दुकान — Firebase Edition
 
 ## Firebase setup
 
